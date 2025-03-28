@@ -40,7 +40,8 @@ def calculate_upcoming_events():
                     'description': event['description'],
                     'datetime': event_datetime_user,
                     'timezone': event['timezone'],
-                    'minus_one': None,
+                    'plus': None,
+                    'minus': None,
                     'instance_date': None
                 })
         else:
@@ -68,7 +69,7 @@ def calculate_upcoming_events():
             current_date = repeat_start
             i = event.get('start_at', 1)
             found_upcoming = False
-            dates=[]
+
             while current_date <= repeat_end and not found_upcoming:
 
                 date_str = current_date.strftime('%Y-%m-%d')
@@ -92,9 +93,26 @@ def calculate_upcoming_events():
                     elif repeat_type == 'yearly':
                         current_date = current_date.replace(year=current_date.year + 1)
                     continue
-                dates.append(current_date)
+
                 event_datetime_user = datetime.combine(current_date, datetime.strptime(event['start'], "%H:%M:%S").time())
                 event_datetime_utc = pytz.timezone(event['timezone']).localize(event_datetime_user).astimezone(pytz.utc)
+
+                plus=minus=True
+                if 'repeat_start' in event:
+                    if repeat_type == 'daily': diff = timedelta(days=1)
+                    elif repeat_type == 'weekly': diff = timedelta(days=7)
+                    elif repeat_type == 'monthly': diff = timedelta(months=1)
+                    elif repeat_type == 'yearly': diff = timedelta(years=1)
+
+                    repeat_start_date = datetime.strptime(event['repeat_start'], "%Y-%m-%d").date()
+                    if  repeat_start_date >= current_date and (repeat_start_date + diff) <= current_date:
+                        plus=False
+                    if repeat_start_date <= current_date and (repeat_start_date + diff) >= current_date:
+                        minus=False
+
+                elif 'start_at' in event:
+                    if event['start_at'] == event['end_at']:
+                        plus=False
 
                 if repeat_type == 'weekly' and current_date.weekday() in event.get('weekdays', []):
                     if event_datetime_utc > now:
@@ -104,7 +122,8 @@ def calculate_upcoming_events():
                             'description': event['description'],
                             'datetime': event_datetime_user,
                             'timezone': event['timezone'],
-                            'minus_one': dates[0] if len(dates)>1 and '{i}' in event['name'] else None,
+                            'plus': plus if '{i}' in event['name'] else False,
+                            'minus': minus if '{i}' in event['name'] else False,
                             'instance_date': current_date.strftime('%Y-%m-%d')
                         })
                         found_upcoming = True
@@ -118,7 +137,8 @@ def calculate_upcoming_events():
                             'description': event['description'],
                             'datetime': event_datetime_user,
                             'timezone': event['timezone'],
-                            'minus_one': dates[0] if len(dates)>1 and '{i}' in event['name'] else None,
+                            'plus': plus if '{i}' in event['name'] else False,
+                            'minus': minus if '{i}' in event['name'] else False,
                             'instance_date': current_date.strftime('%Y-%m-%d')
                         })
                         found_upcoming = True
@@ -218,6 +238,36 @@ def skip_instance(event_id):
         json.dump(events, f, indent=4)
 
     return jsonify({'message': 'Instance skipped successfully'}), 200
+
+@app.route('/alter_count/<int:event_id>', methods=['POST'])
+def alter_count(event_id):
+    if event_id < 0 or event_id >= len(events):
+        return jsonify({'error': 'Invalid event ID'}), 404
+
+    data = request.json
+    if not data.get('count'):
+        return jsonify({'error': 'Count is required to alter event counter'}), 400
+
+    event = events[event_id]
+
+    count= data['count']
+    if 'start_at' in event:
+        event['start_at'] += count
+    elif  'repeat_start' in event:
+        repeat_start = datetime.strptime(event['repeat_start'], "%Y-%m-%d").date()
+
+        repeat_type = event['repeat']
+        if repeat_type == 'daily': diff = timedelta(days=count)
+        elif repeat_type == 'weekly': diff = timedelta(days=count*7)
+        elif repeat_type == 'monthly': diff = timedelta(months=count)
+        elif repeat_type == 'yearly': diff = timedelta(years=count)
+        event['repeat_start'] = repeat_start - diff
+        event['repeat_start'] = event['repeat_start'].strftime('%Y-%m-%d')
+
+    with open('events.json', 'w') as f:
+        json.dump(events, f, indent=4)
+
+    return jsonify({'message': 'Counter altered successfully'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)

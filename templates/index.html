@@ -221,11 +221,18 @@
             {% for event in upcoming_events %}
             <div class="countdown-card">
                 <div class="event-actions">
-                {% if event.minus_one %}
-                    <button class="btn btn-outline-danger btn-sm skip-instance"
+                {% if event.minus %}
+                    <button class="btn btn-outline-secondary btn-sm plus-minus"
                             data-event-id="{{ event.id }}"
-                            data-instance-date="{{ event.minus_one }}">
-                        Minus 1
+                            data-alter-count="-1">
+                        -1
+                    </button>
+                {% endif %}
+                {% if event.plus %}
+                    <button class="btn btn-outline-secondary btn-sm plus-minus"
+                            data-event-id="{{ event.id }}"
+                            data-alter-count="1">
+                        +1
                     </button>
                 {% endif %}
                 {% if event.instance_date %}
@@ -255,7 +262,6 @@
     <script>
         const addButton = document.getElementById('addEventButton');
         const eventForm = document.getElementById('eventForm');
-        const closeForm = document.getElementById('closeForm');
 
         // Toggle form visibility on button click
         addButton.addEventListener('click', function() {
@@ -263,11 +269,6 @@
             addButton.innerHTML = eventForm.style.display === 'block' ? '<i class="fas fa-times"></i>' : '<i class="fas fa-plus"></i>';
         });
 
-        // Close form when the close icon is clicked
-        closeForm.addEventListener('click', function() {
-            eventForm.style.display = 'none';
-            addButton.innerHTML = '<i class="fas fa-plus"></i>';
-        });
     </script>
 <script>
     function updateValswithToday() {
@@ -355,8 +356,9 @@
             .then(data => {
                 if (data.error) {
                     alert('Error: ' + data.error);
-                } else {
-                    alert('Event added successfully!');
+                }
+                else {
+                //     alert('Event added successfully!');
                     window.location.reload();
                 }
             })
@@ -377,9 +379,10 @@
                     .then(data => {
                         if (data.error) {
                             alert('Error: ' + data.error);
-                        } else {
-                            alert('Event deleted successfully!');
-                            window.location.reload();
+                        }
+                        else {
+                        //    alert('Event deleted successfully!');
+                           window.location.reload();
                         }
                     })
                     .catch(error => {
@@ -406,9 +409,10 @@
                     .then(data => {
                         if (data.error) {
                             alert('Error: ' + data.error);
-                        } else {
-                            alert('Instance skipped successfully!');
-                            window.location.reload();
+                        }
+                        else {
+                        //   alert('Instance skipped successfully!');
+                           window.location.reload();
                         }
                     })
                     .catch(error => {
@@ -417,6 +421,42 @@
                     });
                 }
             }
+            // plus minus
+            if (e.target.classList.contains('plus-minus')) {
+                const alterCount = parseInt(e.target.dataset.alterCount);
+                if (alterCoutn => 0){
+                    doo="increase"
+                }else{
+                    doo="decrease"
+                }
+
+                if (confirm(`Are you sure you want to ${doo} event's counter by ${Math.abs(alterCount)}?`)) {
+                    const eventId = e.target.dataset.eventId;
+
+                    fetch(`/alter_count/${eventId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ count: alterCount })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert('Error: ' + data.error);
+                        }
+                        else {
+                        //   alert('Instance skipped successfully!');
+                            window.location.reload();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while altering the event counter.');
+                    });
+                }
+            }
+
         });
         // Update countdown timers
         function updateCountdowns() {
