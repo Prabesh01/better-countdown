@@ -16,7 +16,27 @@ except: pass
 @app.route('/')
 def index():
     upcoming_events = calculate_upcoming_events()
-    return render_template('index.html', upcoming_events=upcoming_events)
+
+    # Get all unique tags
+    all_tags = set()
+    for event in events:
+        if 'tags' in event:
+            all_tags.update(event['tags'])
+
+    # Get filter from query parameter
+    filter_tag = request.args.get('filter', 'all')
+
+    # Filter events if needed
+    if filter_tag != 'all':
+        if filter_tag == 'none':
+            filtered_events = [e for e in upcoming_events if 'tags' not in events[e['id']] or not events[e['id']]['tags']]
+        else:
+            filtered_events = [e for e in upcoming_events if 'tags' in events[e['id']] and filter_tag in events[e['id']]['tags']]
+    else:
+        filtered_events = upcoming_events
+
+    return render_template('index.html', upcoming_events=filtered_events,all_tags=sorted(all_tags), current_filter=filter_tag)
+
 
 def calculate_upcoming_events():
     # Calculate upcoming events for countdown
@@ -42,7 +62,8 @@ def calculate_upcoming_events():
                     'timezone': event['timezone'],
                     'plus': None,
                     'minus': None,
-                    'instance_date': None
+                    'instance_date': None,
+                    "tags": event.get('tags', [])
                 })
         else:
             # Handle repeating events
@@ -124,7 +145,8 @@ def calculate_upcoming_events():
                             'timezone': event['timezone'],
                             'plus': plus if '{i}' in event['name'] else False,
                             'minus': minus if '{i}' in event['name'] else False,
-                            'instance_date': current_date.strftime('%Y-%m-%d')
+                            'instance_date': current_date.strftime('%Y-%m-%d'),
+                            "tags": event.get('tags', [])
                         })
                         found_upcoming = True
                         # break
@@ -139,7 +161,8 @@ def calculate_upcoming_events():
                             'timezone': event['timezone'],
                             'plus': plus if '{i}' in event['name'] else False,
                             'minus': minus if '{i}' in event['name'] else False,
-                            'instance_date': current_date.strftime('%Y-%m-%d')
+                            'instance_date': current_date.strftime('%Y-%m-%d'),
+                            "tags": event.get('tags', [])
                         })
                         found_upcoming = True
                         # break  # Only take the next instance
@@ -183,7 +206,8 @@ def add_event():
         'start': data.get('start', '00:00:00'),
         'description': data.get('description', ''),
         'timezone': data['timezone'],
-        'repeat': data.get('repeat')
+        'repeat': data.get('repeat'),
+        'tags': data.get('tags', [])
     }
 
     # Handle repeating events
@@ -268,6 +292,22 @@ def alter_count(event_id):
         json.dump(events, f, indent=4)
 
     return jsonify({'message': 'Counter altered successfully'}), 200
+
+@app.route('/update_description/<int:event_id>', methods=['POST'])
+def update_description(event_id):
+    if event_id < 0 or event_id >= len(events):
+        return jsonify({'error': 'Invalid event ID'}), 404
+
+    data = request.json
+    if 'description' not in data:
+        return jsonify({'error': 'Description is required'}), 400
+
+    events[event_id]['description'] = data['description']
+
+    with open('events.json', 'w') as f:
+        json.dump(events, f, indent=4)
+
+    return jsonify({'message': 'Description updated successfully'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)

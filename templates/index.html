@@ -58,6 +58,51 @@
             padding: 0.25rem 0.5rem;
             font-size: 0.875rem;
         }
+        .tag-filter {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .tag-filter .badge {
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 8px 12px;
+        }
+        .tag-filter .badge.active {
+            background-color: #0d6efd !important;
+        }
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .event-tag {
+            font-size: 0.8rem;
+        }
+        .event-description {
+            position: relative;
+            min-height: 40px;
+        }
+        .description-text {
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        .description-text:hover {
+            background-color: #f8f9fa;
+        }
+        .description-edit {
+            display: none;
+            min-height: 100px;
+        }
+        .description-edit.active {
+            display: block;
+        }
+        .description-text.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -80,6 +125,13 @@
                         <small class="text-muted">Use {i} for counter in repeating events</small>
                     </div>
                     <div class="col-md-6">
+                        <div class="row mb-3">
+                            <div class="col-md-12">
+                                <label for="eventTags" class="form-label">Tags/Categories</label>
+                                <input type="text" class="form-control" id="eventTags" placeholder="Comma-separated tags (e.g., work, personal, meeting)">
+                                <small class="text-muted">Separate multiple tags with commas</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -217,6 +269,17 @@
 
         <!-- Countdown Display -->
         <h2 class="mt-5 mb-4">Upcoming Events</h2>
+        <!-- Tag Filter -->
+        <div class="tag-filter">
+            <span class="badge bg-success {% if current_filter == 'all' %}active{% endif %}"
+                  onclick="filterEvents('all')">All</span>
+            <span class="badge bg-secondary {% if current_filter == 'none' %}active{% endif %}"
+                  onclick="filterEvents('none')">No Tags</span>
+            {% for tag in all_tags %}
+            <span class="badge bg-success {% if current_filter == tag %}active{% endif %}"
+                  onclick="filterEvents('{{ tag }}')">{{ tag }}</span>
+            {% endfor %}
+        </div>
         <div id="countdownContainer">
             {% for event in upcoming_events %}
             <div class="countdown-card">
@@ -249,10 +312,27 @@
                 </div>
                 <h3>{{ event.name }}</h3>
                 <pre>{{ event.datetime.strftime('%Y-%m-%d %I:%M:%S %p') }} ({{ event.timezone }})</pre>
+
+                <!-- <div class="tags-container">
+                    {% for tag in event.tags %}
+                    <span class="badge bg-success event-tag">{{ tag }}</span>
+                    {% endfor %}
+                </div> -->
+
                 <div class="countdown-timer" data-end="{{ event.datetime.isoformat() }}">
                     Calculating...
                 </div>
-                <p>{{ event.description }}</p>
+                <div class="event-description mb-2">
+                    {% if event.description %}
+                    <p class="description-text">{{ event.description | replace('\n', '<br>') | safe}}</p>
+                    {% else %}
+                    <p class="description-text text-muted">+ Add Description</p>
+                    {% endif %}
+                    <textarea class="form-control description-edit hidden"
+                              data-event-id="{{ event.id }}">
+                        {{ event.description }}
+                    </textarea>
+                </div>
             </div>
             {% else %}
             <div class="alert alert-info">No upcoming events. Add some events to see countdowns.</div>
@@ -271,6 +351,10 @@
 
     </script>
 <script>
+    // Add this new function for filtering
+    function filterEvents(tag) {
+        window.location.href = `/?filter=${encodeURIComponent(tag)}`;
+    }
     function updateValswithToday() {
         const today = new Date();
         const day = today.getDay();
@@ -313,13 +397,17 @@
         // Form submission
         document.getElementById('addEventForm').addEventListener('submit', function(e) {
             e.preventDefault();
-
+            const tagsInput = document.getElementById('eventTags').value;
+            const tags = tagsInput.split(',')
+                .map(tag => tag.trim())
+                .filter(tag => tag.length > 0);
             const eventData = {
                 name: document.getElementById('eventName').value,
                 date: document.getElementById('eventDate').value,
                 start: document.getElementById('startTime').value,
                 description: document.getElementById('eventDescription').value,
                 timezone: document.getElementById('timezone').value,
+                tags: tags
             };
 
             const repeatType = document.getElementById('repeatType').value;
@@ -492,6 +580,73 @@
         const nextMonth = new Date();
         nextMonth.setMonth(nextMonth.getMonth() + 1);
         document.getElementById('repeatEnd').value = nextMonth.toISOString().split('T')[0];
+    </script>
+    <script>
+        document.addEventListener('click', function(e) {
+            // Handle description clicks
+            if (e.target.classList.contains('description-text')) {
+                const descriptionContainer = e.target.closest('.event-description');
+                const textElement = descriptionContainer.querySelector('.description-text');
+                const editElement = descriptionContainer.querySelector('.description-edit');
+
+                textElement.classList.add('hidden');
+                editElement.classList.add('active');
+                editElement.focus();
+            }
+        });
+
+        // Handle description saves
+        document.addEventListener('focusout', function(e) {
+            if (e.target.classList.contains('description-edit')) {
+                const descriptionContainer = e.target.closest('.event-description');
+                const textElement = descriptionContainer.querySelector('.description-text');
+                const editElement = descriptionContainer.querySelector('.description-edit');
+                const eventId = editElement.dataset.eventId;
+                const newDescription = editElement.value.trim();
+
+                // Update via API
+                fetch(`/update_description/${eventId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ description: newDescription })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                    } else {
+                        // Update UI
+                        if (newDescription) {
+                            textElement.textContent = newDescription;
+                            textElement.classList.remove('text-muted');
+                        } else {
+                            textElement.textContent = 'No description (click to add)';
+                            textElement.classList.add('text-muted');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                })
+                .finally(() => {
+                    textElement.classList.remove('hidden');
+                    editElement.classList.remove('active');
+                });
+            }
+        });
+
+        // Handle Enter key to save
+        document.addEventListener('keydown', function(e) {
+            if (e.target.classList.contains('description-edit')) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    e.target.blur(); // Triggers the focusout event
+                }
+                // Shift+Enter will allow new lines naturally
+            }
+        });
     </script>
 </body>
 </html>
