@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Countdown</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .countdown-card {
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .countdown-timer {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        #eventForm {
+            display: none;
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .hidden {
+            display: none;
+        }
+        #addEventButton {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: #007bff; /* Bootstrap primary color */
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: white;
+            font-size: 20px;
+            transition: background 0.3s;
+        }
+
+        #addEventButton:hover {
+            background: #0056b3; /* Darker shade for hover */
+        }
+        .event-actions {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <button id="addEventButton" class="btn btn-primary">
+        <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2v20M2 12h20" />
+        </svg>
+    </button>
+    <div class="container py-5">
+        <h1 class="text-center mb-5">Event Countdown</h1>
+
+        <!-- Event Form -->
+        <div id="eventForm">
+            <h2>Add New Event</h2>
+            <form id="addEventForm">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="eventName" class="form-label">Event Name *</label>
+                        <input type="text" class="form-control" id="eventName" required placeholder="e.g., Meeting - {i}">
+                        <small class="text-muted">Use {i} for counter in repeating events</small>
+                    </div>
+                    <div class="col-md-6">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <label for="eventDate" class="form-label">Date *</label>
+                        <input type="date" class="form-control" id="eventDate" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="startTime" class="form-label">Start Time</label>
+                        <input type="time" class="form-control" id="startTime" step="1" value="00:00:00">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="timezone" class="form-label">Timezone *</label>
+                        <select class="form-select" id="timezone" required>
+                            <option value="">Select Timezone</option>
+                            <option value="Asia/Kathmandu" selected="selected">(GMT +05:45) Nepal Time</option>
+                            <option value="UTC">UTC</option>
+                            <option value="America/New_York">Eastern Time (ET)</option>
+                            <option value="America/Chicago">Central Time (CT)</option>
+                            <option value="America/Denver">Mountain Time (MT)</option>
+                            <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                            <option value="Europe/London">London</option>
+                            <option value="Europe/Paris">Paris</option>
+                            <option value="Asia/Tokyo">Tokyo</option>
+                            <option value="Australia/Sydney">Sydney</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label for="eventDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="eventDescription" rows="2"></textarea>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Repeat</label>
+                        <select class="form-select" id="repeatType">
+                            <option value="">Does not repeat</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="yearly">Yearly</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Weekly options (hidden by default) -->
+                <div id="weeklyOptions" class="row mb-3 hidden">
+                    <div class="col-md-12">
+                        <label class="form-label">Repeat on weekdays</label>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="sun" value="6">
+                            <label class="form-check-label" for="sun">Sun</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="mon" value="0">
+                            <label class="form-check-label" for="mon">Mon</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="tue" value="1">
+                            <label class="form-check-label" for="tue">Tue</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="wed" value="2">
+                            <label class="form-check-label" for="wed">Wed</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="thu" value="3">
+                            <label class="form-check-label" for="thu">Thu</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="fri" value="4">
+                            <label class="form-check-label" for="fri">Fri</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="sat" value="5">
+                            <label class="form-check-label" for="sat">Sat</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Repeat options (hidden by default) -->
+                <div id="repeatOptions" class="hidden">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="repeatRange" id="repeatDates" value="dates" checked>
+                                <label class="form-check-label" for="repeatDates">
+                                    Repeat between dates
+                                </label>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-6">
+                                    <label for="repeatStart" class="form-label">Start Date</label>
+                                    <input type="date" class="form-control" id="repeatStart">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="repeatEnd" class="form-label">End Date</label>
+                                    <input type="date" class="form-control" id="repeatEnd">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="repeatRange" id="repeatCount" value="count">
+                                <label class="form-check-label" for="repeatCount">
+                                    Repeat with counter
+                                </label>
+                            </div>
+                            <div class="row mt-2">
+                                <div class="col-md-6">
+                                    <label for="startAt" class="form-label">Start At</label>
+                                    <input type="number" class="form-control" id="startAt" value="1" min="1">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="endAt" class="form-label">End At</label>
+                                    <input type="number" class="form-control" id="endAt" value="12" min="1">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-primary">Add Event</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Countdown Display -->
+        <h2 class="mt-5 mb-4">Upcoming Events</h2>
+        <div id="countdownContainer">
+            {% for event in upcoming_events %}
+            <div class="countdown-card">
+                <div class="event-actions">
+                {% if event.minus_one %}
+                    <button class="btn btn-outline-danger btn-sm skip-instance"
+                            data-event-id="{{ event.id }}"
+                            data-instance-date="{{ event.minus_one }}">
+                        Minus 1
+                    </button>
+                {% endif %}
+                {% if event.instance_date %}
+                    <button class="btn btn-outline-danger btn-sm skip-instance"
+                            data-event-id="{{ event.id }}"
+                            data-instance-date="{{ event.instance_date }}">
+                        Skip This Instance
+                    </button>
+                {% endif %}
+                    <button class="btn btn-outline-danger btn-sm delete-event"
+                            data-event-id="{{ event.id }}">
+                        Delete Event
+                    </button>
+                </div>
+                <h3>{{ event.name }}</h3>
+                <pre>{{ event.datetime.strftime('%Y-%m-%d %I:%M:%S %p') }} ({{ event.timezone }})</pre>
+                <div class="countdown-timer" data-end="{{ event.datetime.isoformat() }}">
+                    Calculating...
+                </div>
+                <p>{{ event.description }}</p>
+            </div>
+            {% else %}
+            <div class="alert alert-info">No upcoming events. Add some events to see countdowns.</div>
+            {% endfor %}
+        </div>
+    </div>
+    <script>
+        const addButton = document.getElementById('addEventButton');
+        const eventForm = document.getElementById('eventForm');
+        const closeForm = document.getElementById('closeForm');
+
+        // Toggle form visibility on button click
+        addButton.addEventListener('click', function() {
+            eventForm.style.display = eventForm.style.display === 'block' ? 'none' : 'block';
+            addButton.innerHTML = eventForm.style.display === 'block' ? '<i class="fas fa-times"></i>' : '<i class="fas fa-plus"></i>';
+        });
+
+        // Close form when the close icon is clicked
+        closeForm.addEventListener('click', function() {
+            eventForm.style.display = 'none';
+            addButton.innerHTML = '<i class="fas fa-plus"></i>';
+        });
+    </script>
+<script>
+    function updateValswithToday() {
+        const today = new Date();
+        const day = today.getDay();
+
+        const hours = String(today.getHours()).padStart(2, '0');
+        const minutes = String(today.getMinutes()).padStart(2, '0');
+        const seconds = String(today.getSeconds()).padStart(2, '0');
+
+        const timeString = `${hours}:${minutes}:${seconds}`;
+
+        document.getElementById('startTime').value = timeString;
+
+        const checkbox = document.getElementById(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][day]);
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+    }
+    document.addEventListener("DOMContentLoaded", updateValswithToday);
+</script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Show/hide repeat options based on selection
+        document.getElementById('repeatType').addEventListener('change', function() {
+            const repeatOptions = document.getElementById('repeatOptions');
+            const weeklyOptions = document.getElementById('weeklyOptions');
+
+            if (this.value) {
+                repeatOptions.classList.remove('hidden');
+                if (this.value === 'weekly') {
+                    weeklyOptions.classList.remove('hidden');
+                } else {
+                    weeklyOptions.classList.add('hidden');
+                }
+            } else {
+                repeatOptions.classList.add('hidden');
+                weeklyOptions.classList.add('hidden');
+            }
+        });
+
+        // Form submission
+        document.getElementById('addEventForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const eventData = {
+                name: document.getElementById('eventName').value,
+                date: document.getElementById('eventDate').value,
+                start: document.getElementById('startTime').value,
+                description: document.getElementById('eventDescription').value,
+                timezone: document.getElementById('timezone').value,
+            };
+
+            const repeatType = document.getElementById('repeatType').value;
+            if (repeatType) {
+                eventData.repeat = repeatType;
+
+                if (repeatType === 'weekly') {
+                    const weekdays = [];
+                    document.querySelectorAll('#weeklyOptions input[type="checkbox"]:checked').forEach(checkbox => {
+                        weekdays.push(parseInt(checkbox.value));
+                    });
+                    eventData.weekdays = weekdays;
+                }
+
+                const repeatRange = document.querySelector('input[name="repeatRange"]:checked').value;
+                if (repeatRange === 'dates') {
+                    eventData.repeat_start = document.getElementById('repeatStart').value;
+                    eventData.repeat_end = document.getElementById('repeatEnd').value;
+                } else {
+                    eventData.start_at = parseInt(document.getElementById('startAt').value);
+                    eventData.end_at = parseInt(document.getElementById('endAt').value);
+                }
+            }
+
+            // Send to server
+            fetch('/add_event', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(eventData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                } else {
+                    alert('Event added successfully!');
+                    window.location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while adding the event.');
+            });
+        });
+        // Delete event
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('delete-event')) {
+                if (confirm('Are you sure you want to delete this entire event?')) {
+                    const eventId = e.target.dataset.eventId;
+                    fetch(`/delete_event/${eventId}`, {
+                        method: 'DELETE'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert('Error: ' + data.error);
+                        } else {
+                            alert('Event deleted successfully!');
+                            window.location.reload();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while deleting the event.');
+                    });
+                }
+            }
+
+            // Skip instance
+            if (e.target.classList.contains('skip-instance')) {
+                if (confirm('Are you sure you want to skip this specific instance?')) {
+                    const eventId = e.target.dataset.eventId;
+                    const instanceDate = e.target.dataset.instanceDate;
+
+                    fetch(`/skip_instance/${eventId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ date: instanceDate })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert('Error: ' + data.error);
+                        } else {
+                            alert('Instance skipped successfully!');
+                            window.location.reload();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while skipping the instance.');
+                    });
+                }
+            }
+        });
+        // Update countdown timers
+        function updateCountdowns() {
+            const now = new Date();
+            document.querySelectorAll('.countdown-timer').forEach(timer => {
+                const endDate = new Date(timer.dataset.end);
+                const diff = endDate - now;
+
+                if (diff <= 0) {
+                    timer.textContent = 'Event has started!';
+                    return;
+                }
+
+                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+                timer.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+            });
+        }
+
+        // Initialize countdowns and update every second
+        updateCountdowns();
+        setInterval(updateCountdowns, 1000);
+
+        // Set default dates
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('eventDate').value = today;
+        document.getElementById('repeatStart').value = today;
+
+        // Set repeat end to 1 month from now
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        document.getElementById('repeatEnd').value = nextMonth.toISOString().split('T')[0];
+    </script>
+</body>
+</html>
