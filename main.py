@@ -27,8 +27,9 @@ def verify_password(username, password):
 
 
 events = []
+data_file=os.getenv("DATA_FILE", "events.json")
 try:
-    with open('events.json', 'r') as f:
+    with open(data_file, 'r') as f:
         events = json.load(f)
 except: pass
 
@@ -235,7 +236,7 @@ def add_event():
             return jsonify({'error': 'For repeating events, either repeat_start/repeat_end or start_at/end_at are required'}), 400
 
     events.append(event)
-    with open('events.json', 'w') as f:
+    with open(data_file, 'w') as f:
         json.dump(events, f, indent=4)
     return jsonify({'message': 'Event added successfully'}), 200
 
@@ -248,7 +249,7 @@ def delete_event(event_id):
 
     del events[event_id]
 
-    with open('events.json', 'w') as f:
+    with open(data_file, 'w') as f:
         json.dump(events, f, indent=4)
 
     return jsonify({'message': 'Event deleted successfully'}), 200
@@ -271,7 +272,7 @@ def skip_instance(event_id):
     if data['date'] not in event['skip']:
         event['skip'].append(data['date'])
 
-    with open('events.json', 'w') as f:
+    with open(data_file, 'w') as f:
         json.dump(events, f, indent=4)
 
     return jsonify({'message': 'Instance skipped successfully'}), 200
@@ -303,7 +304,7 @@ def alter_count(event_id):
         event['repeat_start'] = repeat_start - diff
         event['repeat_start'] = event['repeat_start'].strftime('%Y-%m-%d')
 
-    with open('events.json', 'w') as f:
+    with open(data_file, 'w') as f:
         json.dump(events, f, indent=4)
 
     return jsonify({'message': 'Counter altered successfully'}), 200
@@ -321,7 +322,7 @@ def update_description(event_id):
 
     events[event_id]['description'] = data['description']
 
-    with open('events.json', 'w') as f:
+    with open(data_file, 'w') as f:
         json.dump(events, f, indent=4)
 
     return jsonify({'message': 'Description updated successfully'}), 200
