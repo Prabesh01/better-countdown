@@ -112,8 +112,7 @@
         </svg>
     </button>
     <div class="container py-5">
-        <h1 class="text-center mb-5">Event Countdown</h1>
-
+        <!--        <h1 class="text-center mb-5">Event Countdown</h1>  -->
         <!-- Event Form -->
         <div id="eventForm">
             <h2>Add New Event</h2>
@@ -271,13 +270,10 @@
         <h2 class="mt-5 mb-4">Upcoming Events</h2>
         <!-- Tag Filter -->
         <div class="tag-filter">
-            <span class="badge bg-success {% if current_filter == 'all' %}active{% endif %}"
-                  onclick="filterEvents('all')">All</span>
-            <span class="badge bg-secondary {% if current_filter == 'none' %}active{% endif %}"
-                  onclick="filterEvents('none')">No Tags</span>
+            <span class="badge bg-success active" data-filter="all">All</span>
+            <span class="badge bg-secondary" data-filter="none">No Tags</span>
             {% for tag in all_tags %}
-            <span class="badge bg-success {% if current_filter == tag %}active{% endif %}"
-                  onclick="filterEvents('{{ tag }}')">{{ tag }}</span>
+            <span class="badge bg-success" data-filter="{{ tag }}">{{ tag }}</span>
             {% endfor %}
         </div>
         <div id="countdownContainer">
@@ -313,11 +309,8 @@
                 <h3>{{ event.name }}</h3>
                 <pre>{{ event.datetime.strftime('%Y-%m-%d %I:%M:%S %p') }} ({{ event.timezone }})</pre>
 
-                <!-- <div class="tags-container">
-                    {% for tag in event.tags %}
-                    <span class="badge bg-success event-tag">{{ tag }}</span>
-                    {% endfor %}
-                </div> -->
+                <div class="tags-container" data-tags="{% for tag in event.tags %}{{ tag }}{% if not loop.last %},{% endif %}{% endfor %}">
+                </div>
 
                 <div class="countdown-timer" data-end="{{ event.datetime.isoformat() }}">
                     Calculating...
@@ -351,10 +344,6 @@
 
     </script>
 <script>
-    // Add this new function for filtering
-    function filterEvents(tag) {
-        window.location.href = `/?filter=${encodeURIComponent(tag)}`;
-    }
     function updateValswithToday() {
         const today = new Date();
         const day = today.getDay();
@@ -371,6 +360,42 @@
         if (checkbox) {
             checkbox.checked = true;
         }
+
+            // Get all filter badges
+            const filterBadges = document.querySelectorAll('.tag-filter .badge');
+
+            // Add click event to each filter badge
+            filterBadges.forEach(badge => {
+                badge.addEventListener('click', function() {
+                    // Remove active class from all badges
+                    filterBadges.forEach(b => b.classList.remove('active'));
+
+                    // Add active class to clicked badge
+                    this.classList.add('active');
+
+                    // Get filter value
+                    const filter = this.getAttribute('data-filter');
+
+                    // Get all cards
+                    const cards = document.querySelectorAll('.countdown-card'); // Adjust selector to match your card elements
+
+                    // Filter cards
+                    cards.forEach(card => {
+                        const tagsContainer = card.querySelector('.tags-container');
+                        const cardTags = tagsContainer.getAttribute('data-tags')
+                        const cardTagsSplit=cardTags.split(',');
+                        if (filter === 'all') {
+                            card.style.display = ''; // Show all cards
+                        } else if (filter === 'none' && cardTags.length === 0) {
+                            card.style.display = ''; // Show cards with no tags
+                        } else if (cardTagsSplit.includes(filter)) {
+                            card.style.display = ''; // Show cards with matching tag
+                        } else {
+                            card.style.display = 'none'; // Hide cards that don't match
+                        }
+                    });
+                });
+            });
     }
     document.addEventListener("DOMContentLoaded", updateValswithToday);
 </script>

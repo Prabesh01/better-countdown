@@ -4,8 +4,27 @@ from flask import Flask, render_template, request, jsonify
 from datetime import datetime, timedelta
 import pytz
 import json
+from flask_httpauth import HTTPBasicAuth
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+auth = HTTPBasicAuth()
+
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+users = {
+    "prabesh": generate_password_hash(os.getenv("PASSWORD")),
+    "demo": generate_password_hash("demo")
+}
+
+@auth.verify_password
+def verify_password(username, password):
+    if username in users and \
+            check_password_hash(users.get(username), password):
+        return username
+
 
 events = []
 try:
@@ -14,6 +33,7 @@ try:
 except: pass
 
 @app.route('/')
+@auth.login_required
 def index():
     upcoming_events = calculate_upcoming_events()
 
@@ -23,19 +43,7 @@ def index():
         if 'tags' in event:
             all_tags.update(event['tags'])
 
-    # Get filter from query parameter
-    filter_tag = request.args.get('filter', 'all')
-
-    # Filter events if needed
-    if filter_tag != 'all':
-        if filter_tag == 'none':
-            filtered_events = [e for e in upcoming_events if 'tags' not in events[e['id']] or not events[e['id']]['tags']]
-        else:
-            filtered_events = [e for e in upcoming_events if 'tags' in events[e['id']] and filter_tag in events[e['id']]['tags']]
-    else:
-        filtered_events = upcoming_events
-
-    return render_template('index.html', upcoming_events=filtered_events,all_tags=sorted(all_tags), current_filter=filter_tag)
+    return render_template('index.html', upcoming_events=upcoming_events,all_tags=sorted(all_tags))
 
 
 def calculate_upcoming_events():
@@ -192,7 +200,9 @@ def calculate_upcoming_events():
 
 
 @app.route('/add_event', methods=['POST'])
+@auth.login_required
 def add_event():
+    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
     data = request.json
 
     # Validate required fields
@@ -229,9 +239,10 @@ def add_event():
         json.dump(events, f, indent=4)
     return jsonify({'message': 'Event added successfully'}), 200
 
-
+@auth.login_required
 @app.route('/delete_event/<int:event_id>', methods=['DELETE'])
 def delete_event(event_id):
+    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
     if event_id < 0 or event_id >= len(events):
         return jsonify({'error': 'Invalid event ID'}), 404
 
@@ -242,8 +253,10 @@ def delete_event(event_id):
 
     return jsonify({'message': 'Event deleted successfully'}), 200
 
+@auth.login_required
 @app.route('/skip_instance/<int:event_id>', methods=['POST'])
 def skip_instance(event_id):
+    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
     if event_id < 0 or event_id >= len(events):
         return jsonify({'error': 'Invalid event ID'}), 404
 
@@ -263,8 +276,10 @@ def skip_instance(event_id):
 
     return jsonify({'message': 'Instance skipped successfully'}), 200
 
+@auth.login_required
 @app.route('/alter_count/<int:event_id>', methods=['POST'])
 def alter_count(event_id):
+    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
     if event_id < 0 or event_id >= len(events):
         return jsonify({'error': 'Invalid event ID'}), 404
 
@@ -293,8 +308,10 @@ def alter_count(event_id):
 
     return jsonify({'message': 'Counter altered successfully'}), 200
 
+@auth.login_required
 @app.route('/update_description/<int:event_id>', methods=['POST'])
 def update_description(event_id):
+    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
     if event_id < 0 or event_id >= len(events):
         return jsonify({'error': 'Invalid event ID'}), 404
 
