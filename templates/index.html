@@ -538,9 +538,9 @@
             if (e.target.classList.contains('plus-minus')) {
                 const alterCount = parseInt(e.target.dataset.alterCount);
                 if (alterCoutn => 0){
-                    doo="increase"
-                }else{
                     doo="decrease"
+                }else{
+                    doo="increase"
                 }
 
                 if (confirm(`Are you sure you want to ${doo} event's counter by ${Math.abs(alterCount)}?`)) {

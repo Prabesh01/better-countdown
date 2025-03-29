@@ -6,6 +6,7 @@ import pytz
 import json
 from flask_httpauth import HTTPBasicAuth
 from werkzeug.security import generate_password_hash, check_password_hash
+import requests
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -18,6 +19,8 @@ users = {
     "prabesh": generate_password_hash(os.getenv("PASSWORD")),
     "demo": generate_password_hash("demo")
 }
+TOKEN = os.environ.get("GITHUB_GIST_TOKEN")
+gist_id = "10b4cd53f49dff9dd1b59e75716cadbb"
 
 @auth.verify_password
 def verify_password(username, password):
@@ -25,13 +28,37 @@ def verify_password(username, password):
             check_password_hash(users.get(username), password):
         return username
 
+def fetch_gist():
+    url = f"https://api.github.com/gists/{gist_id}"
+    headers = {
+        "Authorization": f"token {TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        gist_data = response.json()
+        first_file = list(gist_data["files"].keys())[0]
+        content = gist_data["files"][first_file]["content"]
+        return json.loads(content)
+    return None
 
-events = []
-data_file=os.getenv("DATA_FILE", "events.json")
-try:
-    with open(data_file, 'r') as f:
-        events = json.load(f)
-except: pass
+def update_gist(content):
+    url = f"https://api.github.com/gists/{gist_id}"
+    headers = {
+        "Authorization": f"token {TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    data = {
+        "files": {
+            "events.json": {
+                "content": json.dumps(content, indent=2)
+            }
+        }
+    }
+    response = requests.patch(url, headers=headers, json=data)
+    return response.json()
+
+events = fetch_gist()
 
 @app.route('/')
 @auth.login_required
@@ -236,8 +263,7 @@ def add_event():
             return jsonify({'error': 'For repeating events, either repeat_start/repeat_end or start_at/end_at are required'}), 400
 
     events.append(event)
-    with open(data_file, 'w') as f:
-        json.dump(events, f, indent=4)
+    update_gist(events)
     return jsonify({'message': 'Event added successfully'}), 200
 
 @auth.login_required
@@ -249,8 +275,7 @@ def delete_event(event_id):
 
     del events[event_id]
 
-    with open(data_file, 'w') as f:
-        json.dump(events, f, indent=4)
+    update_gist(events)
 
     return jsonify({'message': 'Event deleted successfully'}), 200
 
@@ -272,8 +297,7 @@ def skip_instance(event_id):
     if data['date'] not in event['skip']:
         event['skip'].append(data['date'])
 
-    with open(data_file, 'w') as f:
-        json.dump(events, f, indent=4)
+    update_gist(events)
 
     return jsonify({'message': 'Instance skipped successfully'}), 200
 
@@ -304,8 +328,7 @@ def alter_count(event_id):
         event['repeat_start'] = repeat_start - diff
         event['repeat_start'] = event['repeat_start'].strftime('%Y-%m-%d')
 
-    with open(data_file, 'w') as f:
-        json.dump(events, f, indent=4)
+    update_gist(events)
 
     return jsonify({'message': 'Counter altered successfully'}), 200
 
@@ -322,8 +345,7 @@ def update_description(event_id):
 
     events[event_id]['description'] = data['description']
 
-    with open(data_file, 'w') as f:
-        json.dump(events, f, indent=4)
+    update_gist(events)
 
     return jsonify({'message': 'Description updated successfully'}), 200
 
