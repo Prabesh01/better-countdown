@@ -15,20 +15,11 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-users = {
-    "prabesh": generate_password_hash(os.getenv("PASSWORD")),
-    "demo": generate_password_hash("demo")
-}
 TOKEN = os.environ.get("GITHUB_GIST_TOKEN")
 gist_id = "10b4cd53f49dff9dd1b59e75716cadbb"
 
-@auth.verify_password
-def verify_password(username, password):
-    if username in users and \
-            check_password_hash(users.get(username), password):
-        return username
 
-def fetch_gist():
+def fetch_gist(fname):
     url = f"https://api.github.com/gists/{gist_id}"
     headers = {
         "Authorization": f"token {TOKEN}",
@@ -37,12 +28,11 @@ def fetch_gist():
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         gist_data = response.json()
-        first_file = list(gist_data["files"].keys())[0]
-        content = gist_data["files"][first_file]["content"]
+        content = gist_data["files"][fname]["content"]
         return json.loads(content)
     return None
 
-def update_gist(content):
+def update_gist(content, fname="events.json"):
     url = f"https://api.github.com/gists/{gist_id}"
     headers = {
         "Authorization": f"token {TOKEN}",
@@ -50,7 +40,7 @@ def update_gist(content):
     }
     data = {
         "files": {
-            "events.json": {
+            fname: {
                 "content": json.dumps(content, indent=2)
             }
         }
@@ -58,13 +48,35 @@ def update_gist(content):
     response = requests.patch(url, headers=headers, json=data)
     return response.json()
 
-events = fetch_gist()
+users = fetch_gist("users.json")
+event_data = fetch_gist("events.json")
+
+@auth.verify_password
+def verify_password(username, password):
+    global users
+    if not username or not password:
+        return False
+    if username in users:
+        if check_password_hash(users.get(username), password):
+            return username
+    else:
+        users[username] = generate_password_hash(password)
+        update_gist("users.json", users)
+        return username
+    return False
+
 
 @app.route('/')
 @auth.login_required
 def index():
-    upcoming_events = calculate_upcoming_events()
+    global event_data
+    user=auth.username()
+    if not user in event_data:
+        event_data[auth.username()] = []
+        update_gist("events.json", event_data)
 
+    events = event_data[user]
+    upcoming_events = calculate_upcoming_events(events)
     # Get all unique tags
     all_tags = set()
     for event in events:
@@ -74,11 +86,10 @@ def index():
     return render_template('index.html', upcoming_events=upcoming_events,all_tags=sorted(all_tags))
 
 
-def calculate_upcoming_events():
+def calculate_upcoming_events(events):
     # Calculate upcoming events for countdown
     upcoming_events = []
     now = datetime.now(pytz.utc)
-
     for event in events:
         # For non-repeating events
         if not event.get('repeat'):
@@ -230,7 +241,7 @@ def calculate_upcoming_events():
 @app.route('/add_event', methods=['POST'])
 @auth.login_required
 def add_event():
-    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
+    global event_data
     data = request.json
 
     # Validate required fields
@@ -262,27 +273,28 @@ def add_event():
         else:
             return jsonify({'error': 'For repeating events, either repeat_start/repeat_end or start_at/end_at are required'}), 400
 
-    events.append(event)
-    update_gist(events)
+    event_data[auth.username()].append(event)
+    update_gist(event_data)
     return jsonify({'message': 'Event added successfully'}), 200
 
 @auth.login_required
 @app.route('/delete_event/<int:event_id>', methods=['DELETE'])
 def delete_event(event_id):
-    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
+    global event_data
+    events= event_data[auth.username()]
     if event_id < 0 or event_id >= len(events):
         return jsonify({'error': 'Invalid event ID'}), 404
 
     del events[event_id]
-
-    update_gist(events)
+    update_gist(event_data)
 
     return jsonify({'message': 'Event deleted successfully'}), 200
 
 @auth.login_required
 @app.route('/skip_instance/<int:event_id>', methods=['POST'])
 def skip_instance(event_id):
-    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
+    global event_data
+    events= event_data[auth.username()]
     if event_id < 0 or event_id >= len(events):
         return jsonify({'error': 'Invalid event ID'}), 404
 
@@ -297,14 +309,15 @@ def skip_instance(event_id):
     if data['date'] not in event['skip']:
         event['skip'].append(data['date'])
 
-    update_gist(events)
+    update_gist(event_data)
 
     return jsonify({'message': 'Instance skipped successfully'}), 200
 
 @auth.login_required
 @app.route('/alter_count/<int:event_id>', methods=['POST'])
 def alter_count(event_id):
-    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
+    global event_data
+    events= event_data[auth.username()]
     if event_id < 0 or event_id >= len(events):
         return jsonify({'error': 'Invalid event ID'}), 404
 
@@ -328,14 +341,15 @@ def alter_count(event_id):
         event['repeat_start'] = repeat_start - diff
         event['repeat_start'] = event['repeat_start'].strftime('%Y-%m-%d')
 
-    update_gist(events)
+    update_gist(event_data)
 
     return jsonify({'message': 'Counter altered successfully'}), 200
 
 @auth.login_required
 @app.route('/update_description/<int:event_id>', methods=['POST'])
 def update_description(event_id):
-    if auth.current_user() != 'prabesh': return jsonify({'error': 'Unauthorized'}), 403
+    global event_data
+    events= event_data[auth.username()]
     if event_id < 0 or event_id >= len(events):
         return jsonify({'error': 'Invalid event ID'}), 404
 
@@ -345,7 +359,7 @@ def update_description(event_id):
 
     events[event_id]['description'] = data['description']
 
-    update_gist(events)
+    update_gist(event_data)
 
     return jsonify({'message': 'Description updated successfully'}), 200
 
