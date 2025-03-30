@@ -628,9 +628,9 @@
                 const editElement = descriptionContainer.querySelector('.description-edit');
                 const eventId = editElement.dataset.eventId;
                 const newDescription = editElement.value.trim();
-
+                const baseURL = window.location.origin
                 // Update via API
-                fetch(`/update_description/${eventId}`, {
+                fetch(`${baseURL}/update_description/${eventId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
