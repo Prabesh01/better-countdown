@@ -77,11 +77,40 @@ def index():
 
     events = event_data[user]
     upcoming_events = calculate_upcoming_events(events)
+
     # Get all unique tags
     all_tags = set()
     for event in events:
         if 'tags' in event:
             all_tags.update(event['tags'])
+
+    unexpired_events = []
+    for event in upcoming_events: unexpired_events.append(event['id'])
+    for event in events:
+        if not events.index(event) in unexpired_events:
+            event_datetime_user = datetime.strptime(f"{event['date']} {event['start']}", "%Y-%m-%d %H:%M:%S")
+            desc = ""
+            if event["repeat"]:
+                desc = f"Repeat {event['repeat']} "
+                if "weekdays" in event:
+                    desc += f'{len(event["weekdays"])} times and '
+                else:
+                    desc += f'and '
+                if 'repeat_start' in event and 'repeat_end' in event:
+                    desc += f"run from {event['repeat_start']} to {event['repeat_end']}"
+                else:
+                    desc += f"run from {event['start_at']} to {event['end_at']}"
+                if 'skip' in event:
+                    desc += f" , skip {len(event['skip'])} instances"
+            upcoming_events.append({
+                'id': events.index(event),
+                'name': event['name'],
+                'description': event['description'],
+                'datetime': event_datetime_user,
+                'timezone': event['timezone'],
+                "tags": ["expired"],
+                "desc": desc,
+            })
 
     return render_template('index.html', upcoming_events=upcoming_events,all_tags=sorted(all_tags))
 
@@ -121,7 +150,13 @@ def calculate_upcoming_events(events):
                 repeat_start = datetime.strptime(event['repeat_start'], "%Y-%m-%d").date()
                 repeat_end = datetime.strptime(event['repeat_end'], "%Y-%m-%d").date()
             else:
+                if repeat_type == 'weekly':
+                    start_date_local = pytz.timezone(event['timezone']).localize(datetime.combine(start_date, datetime.strptime(event['start'], "%H:%M:%S").time()))
+                    while start_date_local.weekday() not in event.get('weekdays', []):
+                        start_date_local += timedelta(days=1)
+                    start_date = start_date_local.date()
                 repeat_start = start_date
+
                 skip_dates=len(event.get('skip', []))
                 total_events = (event['end_at'] - event['start_at'])+skip_dates
                 if repeat_type == 'daily':
@@ -161,7 +196,6 @@ def calculate_upcoming_events(events):
                     elif repeat_type == 'yearly':
                         current_date = current_date.replace(year=current_date.year + 1)
                     continue
-
                 event_datetime_user = datetime.combine(current_date, datetime.strptime(event['start'], "%H:%M:%S").time())
                 event_datetime_utc = pytz.timezone(event['timezone']).localize(event_datetime_user).astimezone(pytz.utc)
 
@@ -362,6 +396,40 @@ def update_description(event_id):
     update_gist(event_data)
 
     return jsonify({'message': 'Description updated successfully'}), 200
+
+
+@auth.login_required
+@app.route('/extend-event', methods=['POST'])
+def extend_event():
+    global event_data
+    events= event_data[auth.username()]
+
+    data = request.get_json()
+    event_id = int(data['event_id'])
+    hours = data['hours']
+
+    if event_id < 0 or event_id >= len(events):
+        return jsonify({'error': 'Invalid event ID'}), 404
+
+    event = events[event_id]
+    if not event['repeat']:
+        new_datetime = datetime.now(pytz.utc) + timedelta(hours=hours)
+
+        event_tz = pytz.timezone(event['timezone'])
+        new_datetime_local = new_datetime.astimezone(event_tz)
+        events[event_id]['date'] = new_datetime_local.strftime('%Y-%m-%d')
+        events[event_id]['start'] = new_datetime_local.strftime('%H:%M:%S')
+    else:
+        if 'repeat_end' in event:
+            repeat_end = datetime.strptime(event['repeat_end'], "%Y-%m-%d").date()
+            repeat_end += timedelta(hours=hours)
+            events[event_id]['repeat_end'] = repeat_end.strftime('%Y-%m-%d')
+        else:
+            end_at = event.get('end_at', 1)
+            end_at += hours
+            events[event_id]['end_at'] = end_at
+    update_gist(event_data)
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=os.getenv("PORT", 5000), debug=True)

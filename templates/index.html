@@ -103,6 +103,25 @@
         .description-text.hidden {
             display: none;
         }
+        .countdown-card.expired {
+            opacity: 0.8;
+            background-color: #f8f9fa;
+            border-left: 4px solid #dc3545;
+        }
+
+        .countdown-card.expired h3 {
+            color: #6c757d;
+        }
+
+        .expired-time {
+            color: #dc3545;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .extend-container {
+            margin-right: 10px;
+        }
     </style>
 </head>
 <body>
@@ -275,40 +294,54 @@
             {% for tag in all_tags %}
             <span class="badge bg-success" data-filter="{{ tag }}">{{ tag }}</span>
             {% endfor %}
+            <span class="badge bg-danger" data-filter="expired">Expired</span>
         </div>
         <div id="countdownContainer">
             {% for event in upcoming_events %}
             <div class="countdown-card">
                 <div class="event-actions">
-                {% if event.minus %}
-                    <button class="btn btn-outline-secondary btn-sm plus-minus"
-                            data-event-id="{{ event.id }}"
-                            data-alter-count="-1">
-                        -1
-                    </button>
-                {% endif %}
-                {% if event.plus %}
-                    <button class="btn btn-outline-secondary btn-sm plus-minus"
-                            data-event-id="{{ event.id }}"
-                            data-alter-count="1">
-                        +1
-                    </button>
-                {% endif %}
-                {% if event.instance_date %}
-                    <button class="btn btn-outline-danger btn-sm skip-instance"
-                            data-event-id="{{ event.id }}"
-                            data-instance-date="{{ event.instance_date }}">
-                        Skip This Instance
-                    </button>
-                {% endif %}
-                    <button class="btn btn-outline-danger btn-sm delete-event"
+                 {%  if 'expired' in event.tags %}
+                 <div class="extend-container d-flex align-items-center">
+                    <input type="number" class="form-control form-control-sm extend-hours"
+                           style="width: 80px;" min="1" value="24" placeholder="Hours">
+                    <button class="btn btn-outline-primary btn-sm extend-event ms-2"
                             data-event-id="{{ event.id }}">
-                        Delete Event
+                        Extend
                     </button>
+                </div>
+                 {% else %}
+                    {% if event.minus %}
+                        <button class="btn btn-outline-secondary btn-sm plus-minus"
+                                data-event-id="{{ event.id }}"
+                                data-alter-count="-1">
+                            -1
+                        </button>
+                    {% endif %}
+                    {% if event.plus %}
+                        <button class="btn btn-outline-secondary btn-sm plus-minus"
+                                data-event-id="{{ event.id }}"
+                                data-alter-count="1">
+                            +1
+                        </button>
+                    {% endif %}
+                    {% if event.instance_date %}
+                        <button class="btn btn-outline-danger btn-sm skip-instance"
+                                data-event-id="{{ event.id }}"
+                                data-instance-date="{{ event.instance_date }}">
+                            Skip This Instance
+                        </button>
+                    {% endif %}
+                {% endif %}
+                <button class="btn btn-outline-danger btn-sm delete-event"
+                        data-event-id="{{ event.id }}">
+                    Delete Event
+                </button>
                 </div>
                 <h3>{{ event.name }}</h3>
                 <pre>{{ event.datetime.strftime('%Y-%m-%d %I:%M:%S %p') }} ({{ event.timezone }})</pre>
-
+                {% if 'desc' in event %}
+                    <p> {{ event.desc }}
+                {% endif %}
                 <div class="tags-container" data-tags="{% for tag in event.tags %}{{ tag }}{% if not loop.last %},{% endif %}{% endfor %}">
                 </div>
 
@@ -398,6 +431,40 @@
             });
     }
     document.addEventListener("DOMContentLoaded", updateValswithToday);
+</script>
+<script>
+// Handle extend event button
+document.querySelectorAll('.extend-event').forEach(button => {
+    button.addEventListener('click', function() {
+        const eventId = this.getAttribute('data-event-id');
+        const hoursInput = this.closest('.extend-container').querySelector('.extend-hours');
+        const hours = parseInt(hoursInput.value) || 24;
+
+        // Send request to extend the event
+        fetch('/extend-event', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                event_id: eventId,
+                hours: hours
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload(); // Refresh to show updated event
+            } else {
+                alert('Error extending event: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error extending event');
+        });
+    });
+});
 </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
