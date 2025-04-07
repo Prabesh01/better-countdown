@@ -711,7 +711,7 @@ document.querySelectorAll('.extend-event').forEach(button => {
                     } else {
                         // Update UI
                         if (newDescription) {
-                            textElement.textContent = newDescription;
+                            textElement.innerHTML = newDescription.replaceAll('\n', '<br>');
                             textElement.classList.remove('text-muted');
                         } else {
                             textElement.textContent = 'No description (click to add)';
