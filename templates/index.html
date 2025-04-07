@@ -350,14 +350,12 @@
                 </div>
                 <div class="event-description mb-2">
                     {% if event.description %}
-                    <p class="description-text">{{ event.description | trim | replace('\n', '<br>') | safe}}</p>
+                    <p class="description-text">{{ event.description | replace('\n', '<br>') | safe}}</p>
                     {% else %}
                     <p class="description-text text-muted">+ Add Description</p>
                     {% endif %}
                     <textarea class="form-control description-edit hidden"
-                              data-event-id="{{ event.id }}">
-                        {{ event.description }}
-                    </textarea>
+                              data-event-id="{{ event.id }}">{{ event.description | trim }}</textarea>
                 </div>
             </div>
             {% else %}
