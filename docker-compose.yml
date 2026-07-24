@@ -1,0 +1,7 @@
+services:
+  app:
+    image: ghcr.io/prabesh01/better-countdown:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:5000:5000"
