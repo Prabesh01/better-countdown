@@ -345,7 +345,7 @@
                 <div class="tags-container" data-tags="{% for tag in event.tags %}{{ tag }}{% if not loop.last %},{% endif %}{% endfor %}">
                 </div>
 
-                <div class="countdown-timer" data-end="{{ event.datetime.isoformat() }}">
+                <div class="countdown-timer" data-end="{{ event.utc_iso }}">
                     Calculating...
                 </div>
                 <div class="event-description mb-2">

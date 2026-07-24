@@ -7,6 +7,8 @@ import json
 from flask_httpauth import HTTPBasicAuth
 from werkzeug.security import generate_password_hash, check_password_hash
 import requests
+from dateutil.relativedelta import relativedelta
+import uuid
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -16,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TOKEN = os.environ.get("GITHUB_GIST_TOKEN")
-gist_id = "10b4cd53f49dff9dd1b59e75716cadbb"
+gist_id = os.environ.get("GITHUB_GIST_ID")
 
 
 def fetch_gist(fname):
@@ -61,7 +63,7 @@ def verify_password(username, password):
             return username
     else:
         users[username] = generate_password_hash(password)
-        update_gist("users.json", users)
+        update_gist(users, "users.json")
         return username
     return False
 
@@ -73,7 +75,7 @@ def index():
     user=auth.username()
     if not user in event_data:
         event_data[auth.username()] = []
-        update_gist("events.json", event_data)
+        update_gist(event_data, "events.json")
 
     events = event_data[user]
     upcoming_events = calculate_upcoming_events(events)
@@ -84,11 +86,12 @@ def index():
         if 'tags' in event:
             all_tags.update(event['tags'])
 
-    unexpired_events = []
-    for event in upcoming_events: unexpired_events.append(event['id'])
+    unexpired_events = [event['id'] for event in upcoming_events]
     for event in events:
-        if not events.index(event) in unexpired_events:
+        event_id = event['id']
+        if event_id not in unexpired_events:
             event_datetime_user = datetime.strptime(f"{event['date']} {event['start']}", "%Y-%m-%d %H:%M:%S")
+            event_datetime_utc = pytz.timezone(event['timezone']).localize(event_datetime_user).astimezone(pytz.utc)
             desc = ""
             if event["repeat"]:
                 desc = f"Repeat {event['repeat']} "
@@ -103,10 +106,11 @@ def index():
                 if 'skip' in event:
                     desc += f" , skip {len(event['skip'])} instances"
             upcoming_events.append({
-                'id': events.index(event),
+                'id': event_id,
                 'name': event['name'],
                 'description': event['description'],
                 'datetime': event_datetime_user,
+                'utc_iso': event_datetime_utc.isoformat(),
                 'timezone': event['timezone'],
                 "tags": ["expired"],
                 "desc": desc,
@@ -120,6 +124,7 @@ def calculate_upcoming_events(events):
     upcoming_events = []
     now = datetime.now(pytz.utc)
     for event in events:
+        event_id = event['id']
         # For non-repeating events
         if not event.get('repeat'):
             event_datetime_user = datetime.strptime(f"{event['date']} {event['start']}", "%Y-%m-%d %H:%M:%S")
@@ -131,10 +136,11 @@ def calculate_upcoming_events(events):
 
             if event_datetime_utc > now:
                 upcoming_events.append({
-                    'id': events.index(event),
+                    'id': event_id,
                     'name': event['name'].replace('{i}', '1'),
                     'description': event['description'],
                     'datetime': event_datetime_user,
+                    'utc_iso': event_datetime_utc.isoformat(),
                     'timezone': event['timezone'],
                     'plus': None,
                     'minus': None,
@@ -183,7 +189,7 @@ def calculate_upcoming_events(events):
                     if repeat_type == 'daily':
                         current_date += timedelta(days=1)
                     elif repeat_type == 'weekly':
-                        current_date += timedelta(days=7)
+                        current_date += timedelta(days=1)
                     elif repeat_type == 'monthly':
                         try:
                             current_date = current_date.replace(month=current_date.month + 1)
@@ -201,10 +207,10 @@ def calculate_upcoming_events(events):
 
                 plus=minus=True
                 if 'repeat_start' in event:
-                    if repeat_type == 'daily': diff = timedelta(days=1)
-                    elif repeat_type == 'weekly': diff = timedelta(days=7)
-                    elif repeat_type == 'monthly': diff = timedelta(months=1)
-                    elif repeat_type == 'yearly': diff = timedelta(years=1)
+                    if repeat_type == 'daily': diff = relativedelta(days=1)
+                    elif repeat_type == 'weekly': diff = relativedelta(days=7)
+                    elif repeat_type == 'monthly': diff = relativedelta(months=1)
+                    elif repeat_type == 'yearly': diff = relativedelta(years=1)
 
                     repeat_start_date = datetime.strptime(event['repeat_start'], "%Y-%m-%d").date()
                     if  repeat_start_date >= current_date and (repeat_start_date + diff) <= current_date:
@@ -219,10 +225,11 @@ def calculate_upcoming_events(events):
                 if repeat_type == 'weekly' and current_date.weekday() in event.get('weekdays', []):
                     if event_datetime_utc > now:
                         upcoming_events.append({
-                            'id': events.index(event),
+                            'id': event_id,
                             'name': event['name'].replace('{i}', str(i)),
                             'description': event['description'],
                             'datetime': event_datetime_user,
+                            'utc_iso': event_datetime_utc.isoformat(),
                             'timezone': event['timezone'],
                             'plus': plus if '{i}' in event['name'] else False,
                             'minus': minus if '{i}' in event['name'] else False,
@@ -235,7 +242,7 @@ def calculate_upcoming_events(events):
                 elif repeat_type in ['daily', 'monthly', 'yearly']:
                     if event_datetime_utc > now:
                         upcoming_events.append({
-                            'id': events.index(event),
+                            'id': event_id,
                             'name': event['name'].replace('{i}', str(i)),
                             'description': event['description'],
                             'datetime': event_datetime_user,
@@ -253,7 +260,7 @@ def calculate_upcoming_events(events):
                 if repeat_type == 'daily':
                     current_date += timedelta(days=1)
                 elif repeat_type == 'weekly':
-                    current_date += timedelta(days=7)
+                    current_date += timedelta(days=1)
                 elif repeat_type == 'monthly':
                     # Move to same day next month (handles month length differences)
                     try:
@@ -268,7 +275,7 @@ def calculate_upcoming_events(events):
                 elif repeat_type == 'yearly':
                     current_date = current_date.replace(year=current_date.year + 1)
 
-    upcoming_events.sort(key=lambda x: x['datetime'])
+    upcoming_events.sort(key=lambda x: x['utc_iso'])
     return upcoming_events
 
 
@@ -284,6 +291,7 @@ def add_event():
 
     # Set defaults
     event = {
+        'id': uuid.uuid4().hex,
         'name': data['name'],
         'date': data['date'],
         'start': data.get('start', '00:00:00'),
@@ -311,32 +319,34 @@ def add_event():
     update_gist(event_data)
     return jsonify({'message': 'Event added successfully'}), 200
 
+@app.route('/delete_event/<string:event_id>', methods=['DELETE'])
 @auth.login_required
-@app.route('/delete_event/<int:event_id>', methods=['DELETE'])
 def delete_event(event_id):
     global event_data
     events= event_data[auth.username()]
-    if event_id < 0 or event_id >= len(events):
-        return jsonify({'error': 'Invalid event ID'}), 404
 
-    del events[event_id]
-    update_gist(event_data)
+    for idx, ev in enumerate(events):
+        if ev.get('id') == event_id:
+            del events[idx]
+            update_gist(event_data)
+            return jsonify({'message': 'Event deleted successfully'}), 200
 
     return jsonify({'message': 'Event deleted successfully'}), 200
 
+@app.route('/skip_instance/<string:event_id>', methods=['POST'])
 @auth.login_required
-@app.route('/skip_instance/<int:event_id>', methods=['POST'])
 def skip_instance(event_id):
     global event_data
     events= event_data[auth.username()]
-    if event_id < 0 or event_id >= len(events):
-        return jsonify({'error': 'Invalid event ID'}), 404
+
+    event = next((ev for ev in events if ev.get('id') == event_id), None)
+    if not event:
+        return jsonify({'error': 'Event not found'}), 404
 
     data = request.json
     if not data.get('date'):
         return jsonify({'error': 'Date is required to skip instance'}), 400
 
-    event = events[event_id]
     if 'skip' not in event:
         event['skip'] = []
 
@@ -347,69 +357,104 @@ def skip_instance(event_id):
 
     return jsonify({'message': 'Instance skipped successfully'}), 200
 
+@app.route('/alter_count/<string:event_id>', methods=['POST'])
 @auth.login_required
-@app.route('/alter_count/<int:event_id>', methods=['POST'])
 def alter_count(event_id):
     global event_data
     events= event_data[auth.username()]
-    if event_id < 0 or event_id >= len(events):
-        return jsonify({'error': 'Invalid event ID'}), 404
+    event = next((ev for ev in events if ev.get('id') == event_id), None)
+
+    if not event:
+        return jsonify({'error': 'Event not found'}), 404
 
     data = request.json
-    if not data.get('count'):
+    if 'count' not in data:
         return jsonify({'error': 'Count is required to alter event counter'}), 400
 
-    event = events[event_id]
-
     count= data['count']
+
+    def prev_weekday(date, weekdays):
+        d = date - timedelta(days=1)
+        while True:
+            if d.weekday() in weekdays:
+                return d
+            d -= timedelta(days=1)
+
+    def next_weekday(date, weekdays):
+        d = date + timedelta(days=1)
+        while True:
+            if d.weekday() in weekdays:
+                return d
+            d += timedelta(days=1)
+
     if 'start_at' in event:
         event['start_at'] += count
     elif  'repeat_start' in event:
         repeat_start = datetime.strptime(event['repeat_start'], "%Y-%m-%d").date()
-
         repeat_type = event['repeat']
-        if repeat_type == 'daily': diff = timedelta(days=count)
-        elif repeat_type == 'weekly': diff = timedelta(days=count*7)
-        elif repeat_type == 'monthly': diff = timedelta(months=count)
-        elif repeat_type == 'yearly': diff = timedelta(years=count)
-        event['repeat_start'] = repeat_start - diff
-        event['repeat_start'] = event['repeat_start'].strftime('%Y-%m-%d')
+
+        if repeat_type == 'weekly': 
+            weekdays = event.get('weekdays', [])
+            if not weekdays:
+                diff = timedelta(days=count * 7)
+                new_start = repeat_start - diff
+            else:
+                new_start = repeat_start
+                if count > 0:
+                    for _ in range(count):
+                        new_start = prev_weekday(new_start, weekdays)
+                else:
+                    for _ in range(-count):
+                        new_start = next_weekday(new_start, weekdays)
+            event['repeat_start'] = new_start.strftime('%Y-%m-%d')
+        else:
+            if repeat_type == 'daily':
+                diff = relativedelta(days=count)
+            elif repeat_type == 'monthly': 
+                diff = relativedelta(months=count)
+            elif repeat_type == 'yearly': 
+                diff = relativedelta(years=count)
+
+            event['repeat_start'] = (repeat_start - diff).strftime('%Y-%m-%d')
 
     update_gist(event_data)
 
     return jsonify({'message': 'Counter altered successfully'}), 200
 
+@app.route('/update_description/<string:event_id>', methods=['POST'])
 @auth.login_required
-@app.route('/update_description/<int:event_id>', methods=['POST'])
 def update_description(event_id):
     global event_data
     events= event_data[auth.username()]
-    if event_id < 0 or event_id >= len(events):
-        return jsonify({'error': 'Invalid event ID'}), 404
+    event = next((ev for ev in events if ev.get('id') == event_id), None)
+
+    if not event:
+        return jsonify({'error': 'Event not found'}), 404
 
     data = request.json
     if 'description' not in data:
         return jsonify({'error': 'Description is required'}), 400
 
-    events[event_id]['description'] = data['description']
+    event['description'] = data['description']
 
     update_gist(event_data)
 
     return jsonify({'message': 'Description updated successfully'}), 200
 
 
-@auth.login_required
 @app.route('/extend-event', methods=['POST'])
+@auth.login_required
 def extend_event():
     global event_data
-    events= event_data[auth.username()]
+    events = event_data[auth.username()]
 
     data = request.get_json()
-    event_id = int(data['event_id'])
+    event_id = data['event_id']
     hours = data['hours']
 
-    if event_id < 0 or event_id >= len(events):
-        return jsonify({'error': 'Invalid event ID'}), 404
+    event = next((ev for ev in events if ev.get('id') == event_id), None)
+    if not event:
+        return jsonify({'error': 'Event not found'}), 404
 
     event = events[event_id]
     if not event['repeat']:
@@ -421,7 +466,7 @@ def extend_event():
         events[event_id]['start'] = new_datetime_local.strftime('%H:%M:%S')
     else:
         if 'repeat_end' in event:
-            repeat_end = datetime.strptime(event['repeat_end'], "%Y-%m-%d").date()
+            repeat_end = datetime.strptime(event['repeat_end'], "%Y-%m-%d")
             repeat_end += timedelta(hours=hours)
             events[event_id]['repeat_end'] = repeat_end.strftime('%Y-%m-%d')
         else:
