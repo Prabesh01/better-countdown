@@ -246,6 +246,7 @@ def calculate_upcoming_events(events):
                             'name': event['name'].replace('{i}', str(i)),
                             'description': event['description'],
                             'datetime': event_datetime_user,
+                            'utc_iso': event_datetime_utc.isoformat(),
                             'timezone': event['timezone'],
                             'plus': plus if '{i}' in event['name'] else False,
                             'minus': minus if '{i}' in event['name'] else False,
@@ -475,6 +476,68 @@ def extend_event():
             events[event_id]['end_at'] = end_at
     update_gist(event_data)
     return jsonify({'success': True})
+
+
+@app.route('/view')
+@auth.login_required
+def view_events():
+    global event_data
+    user = auth.username()
+    
+    # Initialize user data if missing
+    if not user in event_data:
+        event_data[user] = []
+        update_gist(event_data, "events.json")
+
+    events = event_data.get(user, [])
+    upcoming_events = calculate_upcoming_events(events)
+    
+    tag_filter = request.args.get('tag')
+    
+    today = datetime.now().date()
+    tomorrow = today + timedelta(days=1)
+    
+    # Calculate the end of the current week - Sunday
+    #days_to_sunday = 6 - today.weekday()
+    #end_of_week = today + timedelta(days=days_to_sunday)
+
+    # Saturday
+    days_to_saturday = (5 - today.weekday()) % 7
+    end_of_week = today + timedelta(days=days_to_saturday)
+
+    next_month_date = today + relativedelta(months=1)
+    
+    categorized = {
+        'Today': [],
+        'Tomorrow': [],
+        'This Week': [],
+        'This Month': [],
+        'Next Month': []
+    }
+    
+    for event in upcoming_events:
+        if tag_filter and tag_filter not in event.get('tags', []):
+            continue
+            
+        event_date = event['datetime'].date()
+        
+        if event_date < today:
+            continue
+        elif event_date == today:
+            categorized['Today'].append(event)
+        elif event_date == tomorrow:
+            categorized['Tomorrow'].append(event)
+        elif event_date <= end_of_week:
+            categorized['This Week'].append(event)
+        elif event_date.month == today.month and event_date.year == today.year:
+            categorized['This Month'].append(event)
+        elif event_date.month == next_month_date.month and event_date.year == next_month_date.year:
+            categorized['Next Month'].append(event)
+            
+    categorized = {k: v for k, v in categorized.items() if v}
+    
+    return render_template('view.html', categorized=categorized, tag_filter=tag_filter)
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=os.getenv("PORT", 5000), debug=True)
