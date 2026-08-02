@@ -9,6 +9,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import requests
 from dateutil.relativedelta import relativedelta
 import uuid
+import nepali_datetime
 
 app = Flask(__name__)
 auth = HTTPBasicAuth()
@@ -112,6 +113,8 @@ def index():
                 'datetime': event_datetime_user,
                 'utc_iso': event_datetime_utc.isoformat(),
                 'timezone': event['timezone'],
+                'is_nepali': is_nepali,
+                'bs_date': current_date.strftime('%Y-%m-%d') if is_nepali else None,
                 "tags": ["expired"],
                 "desc": desc,
             })
@@ -125,9 +128,17 @@ def calculate_upcoming_events(events):
     now = datetime.now(pytz.utc)
     for event in events:
         event_id = event['id']
+        is_nepali = event.get('is_nepali', False)
+
         # For non-repeating events
         if not event.get('repeat'):
-            event_datetime_user = datetime.strptime(f"{event['date']} {event['start']}", "%Y-%m-%d %H:%M:%S")
+            if is_nepali:
+                bs_date = nepali_datetime.datetime.strptime(event['date'], "%Y-%m-%d").date()
+                ad_date = bs_date.to_datetime_date()
+                event_datetime_user = datetime.combine(ad_date, datetime.strptime(event['start'], "%H:%M:%S").time())
+            else:
+                event_datetime_user = datetime.strptime(f"{event['date']} {event['start']}", "%Y-%m-%d %H:%M:%S")
+
             event_datetime_utc = pytz.timezone(event['timezone']).localize(event_datetime_user).astimezone(pytz.utc)
 
             # Check if this instance is skipped
@@ -142,6 +153,8 @@ def calculate_upcoming_events(events):
                     'datetime': event_datetime_user,
                     'utc_iso': event_datetime_utc.isoformat(),
                     'timezone': event['timezone'],
+                    'is_nepali': is_nepali,
+                    'bs_date': current_date.strftime('%Y-%m-%d') if is_nepali else None,
                     'plus': None,
                     'minus': None,
                     'instance_date': None,
@@ -150,11 +163,18 @@ def calculate_upcoming_events(events):
         else:
             # Handle repeating events
             repeat_type = event['repeat']
-            start_date = datetime.strptime(event['date'], "%Y-%m-%d").date()
+            if is_nepali:
+                start_date = nepali_datetime.datetime.strptime(event['date'], "%Y-%m-%d").date()
+            else:
+                start_date = datetime.strptime(event['date'], "%Y-%m-%d").date()
 
             if 'repeat_start' in event and 'repeat_end' in event:
-                repeat_start = datetime.strptime(event['repeat_start'], "%Y-%m-%d").date()
-                repeat_end = datetime.strptime(event['repeat_end'], "%Y-%m-%d").date()
+                if is_nepali:
+                    repeat_start = nepali_datetime.datetime.strptime(event['repeat_start'], "%Y-%m-%d").date()
+                    repeat_end = nepali_datetime.datetime.strptime(event['repeat_end'], "%Y-%m-%d").date()
+                else:
+                    repeat_start = datetime.strptime(event['repeat_start'], "%Y-%m-%d").date()
+                    repeat_end = datetime.strptime(event['repeat_end'], "%Y-%m-%d").date()
             else:
                 if repeat_type == 'weekly':
                     start_date_local = pytz.timezone(event['timezone']).localize(datetime.combine(start_date, datetime.strptime(event['start'], "%H:%M:%S").time()))
@@ -173,7 +193,14 @@ def calculate_upcoming_events(events):
                     skip_days = total_events * 32
                 elif repeat_type == 'yearly':
                     skip_days = total_events * 366
-                repeat_end = start_date + timedelta(days=skip_days)
+
+                try:
+                    repeat_end = start_date + timedelta(days=skip_days)
+                except OverflowError:
+                    if is_nepali:
+                        repeat_end = nepali_datetime.date(2099, 12, 30)
+                    else:
+                        repeat_end = start_date.replace(year=9999)
 
             current_date = repeat_start
             i = event.get('start_at', 1)
@@ -186,9 +213,7 @@ def calculate_upcoming_events(events):
                 # Check if this instance is skipped
                 if 'skip' in event and date_str in event['skip']:
                     # Move to next date without incrementing counter
-                    if repeat_type == 'daily':
-                        current_date += timedelta(days=1)
-                    elif repeat_type == 'weekly':
+                    if repeat_type in ['daily', 'weekly']:
                         current_date += timedelta(days=1)
                     elif repeat_type == 'monthly':
                         try:
@@ -202,7 +227,12 @@ def calculate_upcoming_events(events):
                     elif repeat_type == 'yearly':
                         current_date = current_date.replace(year=current_date.year + 1)
                     continue
-                event_datetime_user = datetime.combine(current_date, datetime.strptime(event['start'], "%H:%M:%S").time())
+                if is_nepali:
+                    ad_date = current_date.to_datetime_date()
+                    event_datetime_user = datetime.combine(ad_date, datetime.strptime(event['start'], "%H:%M:%S").time())
+                else:
+                    event_datetime_user = datetime.combine(current_date, datetime.strptime(event['start'], "%H:%M:%S").time())
+
                 event_datetime_utc = pytz.timezone(event['timezone']).localize(event_datetime_user).astimezone(pytz.utc)
 
                 plus=minus=True
@@ -222,7 +252,7 @@ def calculate_upcoming_events(events):
                     if event['start_at'] == event['end_at']:
                         plus=False
 
-                if repeat_type == 'weekly' and current_date.weekday() in event.get('weekdays', []):
+                if repeat_type == 'weekly' and (ad_date.weekday() if is_nepali else current_date.weekday()) in event.get('weekdays', []):
                     if event_datetime_utc > now:
                         upcoming_events.append({
                             'id': event_id,
@@ -231,6 +261,8 @@ def calculate_upcoming_events(events):
                             'datetime': event_datetime_user,
                             'utc_iso': event_datetime_utc.isoformat(),
                             'timezone': event['timezone'],
+                            'is_nepali': is_nepali,
+                            'bs_date': current_date.strftime('%Y-%m-%d') if is_nepali else None,
                             'plus': plus if '{i}' in event['name'] else False,
                             'minus': minus if '{i}' in event['name'] else False,
                             'instance_date': current_date.strftime('%Y-%m-%d'),
@@ -248,6 +280,8 @@ def calculate_upcoming_events(events):
                             'datetime': event_datetime_user,
                             'utc_iso': event_datetime_utc.isoformat(),
                             'timezone': event['timezone'],
+                            'is_nepali': is_nepali,
+                            'bs_date': current_date.strftime('%Y-%m-%d') if is_nepali else None,
                             'plus': plus if '{i}' in event['name'] else False,
                             'minus': minus if '{i}' in event['name'] else False,
                             'instance_date': current_date.strftime('%Y-%m-%d'),
@@ -295,6 +329,7 @@ def add_event():
         'id': uuid.uuid4().hex,
         'name': data['name'],
         'date': data['date'],
+        'is_nepali': data.get('is_nepali', False),
         'start': data.get('start', '00:00:00'),
         'description': data.get('description', ''),
         'timezone': data['timezone'],
@@ -535,7 +570,6 @@ def view_events():
             categorized['Next Month'].append(event)
             
     categorized = {k: v for k, v in categorized.items() if v}
-    
     return render_template('view.html', categorized=categorized, tag_filter=tag_filter)
 
 

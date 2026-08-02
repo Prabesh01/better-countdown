@@ -68,6 +68,9 @@
                             <h5 class="event-title">{{ event.name }}</h5>
                             <p class="event-date mb-2">
                                 {{ event.datetime.strftime('%A, %b %d') }} 
+    {% if event.is_nepali %}
+        ( {{ event.bs_date }} <span class="badge bg-secondary tag-badge">BS</span> )
+    {% endif %}
                             </p>
                             
                             {% if event.description %}
