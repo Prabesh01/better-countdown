@@ -294,12 +294,12 @@
         <h2 class="mt-5 mb-4">Upcoming Events</h2>
         <!-- Tag Filter -->
         <div class="tag-filter">
-            <span class="badge bg-success active" data-filter="all">All</span>
-            <span class="badge bg-secondary" data-filter="none">No Tags</span>
+            <span class="badge bg-success active" data-filter="all" oncontextmenu="window.location.href='/view'; return false;">All</span>
+            <span class="badge bg-secondary" data-filter="none" oncontextmenu="window.location.href='/view'; return false;">No Tags</span>
             {% for tag in all_tags %}
-            <span class="badge bg-success" data-filter="{{ tag }}">{{ tag }}</span>
+            <span class="badge bg-success" data-filter="{{ tag }}" oncontextmenu="window.location.href='/view?tag={{ tag | urlencode }}'; return false;">{{ tag }}</span>
             {% endfor %}
-            <span class="badge bg-danger" data-filter="expired">Expired</span>
+            <span class="badge bg-danger" data-filter="expired" oncontextmenu="window.location.href='/view'; return false;">Expired</span>
         </div>
         <div id="countdownContainer">
             {% for event in upcoming_events %}
