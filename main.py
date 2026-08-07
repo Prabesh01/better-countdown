@@ -540,12 +540,15 @@ def view_events():
     days_to_saturday = (5 - today.weekday()) % 7
     end_of_week = today + timedelta(days=days_to_saturday)
 
+    end_of_next_week = end_of_week + timedelta(days=7)
+
     next_month_date = today + relativedelta(months=1)
     
     categorized = {
         'Today': [],
         'Tomorrow': [],
         'This Week': [],
+        'Next Week': [],
         'This Month': [],
         'Next Month': []
     }
@@ -564,6 +567,8 @@ def view_events():
             categorized['Tomorrow'].append(event)
         elif event_date <= end_of_week:
             categorized['This Week'].append(event)
+        elif event_date <= end_of_next_week:
+            categorized['Next Week'].append(event)
         elif event_date.month == today.month and event_date.year == today.year:
             categorized['This Month'].append(event)
         elif event_date.month == next_month_date.month and event_date.year == next_month_date.year:
