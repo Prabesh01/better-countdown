@@ -90,6 +90,7 @@ def index():
     unexpired_events = [event['id'] for event in upcoming_events]
     for event in events:
         event_id = event['id']
+        is_nepali = event.get('is_nepali', False)
         if event_id not in unexpired_events:
             event_datetime_user = datetime.strptime(f"{event['date']} {event['start']}", "%Y-%m-%d %H:%M:%S")
             event_datetime_utc = pytz.timezone(event['timezone']).localize(event_datetime_user).astimezone(pytz.utc)
